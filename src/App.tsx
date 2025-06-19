@@ -5,9 +5,15 @@ import type { Quest } from "scum-quest-library";
 
 function App() {
   const [quest, setQuest] = useState<Quest | null>(null);
+  const [loadedQuest, setLoadedQuest] = useState<Quest | null>(null);
 
   const handleQuestUpdate = (updatedQuest: Quest) => {
     setQuest(updatedQuest);
+  };
+
+  const handleLoadQuest = (loadedQuest: Quest) => {
+    setQuest(loadedQuest);
+    setLoadedQuest(loadedQuest);
   };
 
   return (
@@ -21,12 +27,15 @@ function App() {
       <div className="flex-1 flex overflow-hidden">
         {/* Left pane - Form */}
         <div className="w-1/2 border-r border-gray-300 overflow-y-auto">
-          <QuestBuilderForm onQuestUpdate={handleQuestUpdate} />
+          <QuestBuilderForm
+            onQuestUpdate={handleQuestUpdate}
+            preFilledQuest={loadedQuest}
+          />
         </div>
 
         {/* Right pane - JSON output */}
         <div className="w-1/2 overflow-y-auto">
-          <JsonPreview quest={quest} />
+          <JsonPreview quest={quest} onLoadQuest={handleLoadQuest} />
         </div>
       </div>
     </div>

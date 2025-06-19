@@ -13,7 +13,7 @@ export function RewardBuilder({ control }: RewardBuilderProps) {
     remove: removeReward,
   } = useFieldArray({
     control,
-    name: "rewards",
+    name: "RewardPool",
   });
 
   const addReward = () => {
@@ -77,7 +77,7 @@ function RewardPoolEditor({
     remove: removeSkill,
   } = useFieldArray({
     control,
-    name: `rewards.${rewardIndex}.skills`,
+    name: `RewardPool.${rewardIndex}.skills`,
   });
 
   const {
@@ -86,11 +86,11 @@ function RewardPoolEditor({
     remove: removeTrade,
   } = useFieldArray({
     control,
-    name: `rewards.${rewardIndex}.tradeDeals`,
+    name: `RewardPool.${rewardIndex}.tradeDeals`,
   });
 
   // Watch current reward values
-  const currentReward = watch(`rewards.${rewardIndex}`);
+  const currentReward = watch(`RewardPool.${rewardIndex}`);
   const hasCurrency =
     (currentReward?.currencyNormal !== undefined &&
       currentReward.currencyNormal !== null) ||
@@ -105,7 +105,7 @@ function RewardPoolEditor({
 
   const addCurrencySection = () => {
     // Set a default currency value to make the currency section appear
-    setValue(`rewards.${rewardIndex}.currencyNormal`, 1);
+    setValue(`RewardPool.${rewardIndex}.currencyNormal`, 1);
   };
 
   return (
@@ -163,7 +163,7 @@ function RewardPoolEditor({
                 Normal Currency
               </label>
               <input
-                {...register(`rewards.${rewardIndex}.currencyNormal`, {
+                {...register(`RewardPool.${rewardIndex}.currencyNormal`, {
                   valueAsNumber: true,
                 })}
                 type="number"
@@ -177,7 +177,7 @@ function RewardPoolEditor({
                 Gold Currency
               </label>
               <input
-                {...register(`rewards.${rewardIndex}.currencyGold`, {
+                {...register(`RewardPool.${rewardIndex}.currencyGold`, {
                   valueAsNumber: true,
                 })}
                 type="number"
@@ -191,7 +191,7 @@ function RewardPoolEditor({
                 Fame Points
               </label>
               <input
-                {...register(`rewards.${rewardIndex}.fame`, {
+                {...register(`RewardPool.${rewardIndex}.fame`, {
                   valueAsNumber: true,
                 })}
                 type="number"
@@ -222,7 +222,7 @@ function RewardPoolEditor({
             <div key={skillField.id} className="flex gap-2 mb-2">
               <select
                 {...register(
-                  `rewards.${rewardIndex}.skills.${skillIndex}.skill`
+                  `RewardPool.${rewardIndex}.skills.${skillIndex}.skill`
                 )}
                 className="flex-1 p-2 border border-gray-300 rounded text-sm"
               >
@@ -234,7 +234,7 @@ function RewardPoolEditor({
               </select>
               <input
                 {...register(
-                  `rewards.${rewardIndex}.skills.${skillIndex}.experience`,
+                  `RewardPool.${rewardIndex}.skills.${skillIndex}.experience`,
                   { valueAsNumber: true }
                 )}
                 type="number"
@@ -282,7 +282,7 @@ function RewardPoolEditor({
                   </label>
                   <input
                     {...register(
-                      `rewards.${rewardIndex}.tradeDeals.${tradeIndex}.item`
+                      `RewardPool.${rewardIndex}.tradeDeals.${tradeIndex}.item`
                     )}
                     type="text"
                     className="w-full p-2 border border-gray-300 rounded text-sm"
@@ -295,7 +295,7 @@ function RewardPoolEditor({
                   </label>
                   <input
                     {...register(
-                      `rewards.${rewardIndex}.tradeDeals.${tradeIndex}.price`,
+                      `RewardPool.${rewardIndex}.tradeDeals.${tradeIndex}.price`,
                       { valueAsNumber: true }
                     )}
                     type="number"
@@ -312,7 +312,7 @@ function RewardPoolEditor({
                   </label>
                   <input
                     {...register(
-                      `rewards.${rewardIndex}.tradeDeals.${tradeIndex}.amount`,
+                      `RewardPool.${rewardIndex}.tradeDeals.${tradeIndex}.amount`,
                       { valueAsNumber: true }
                     )}
                     type="number"
@@ -327,7 +327,7 @@ function RewardPoolEditor({
                   </label>
                   <input
                     {...register(
-                      `rewards.${rewardIndex}.tradeDeals.${tradeIndex}.fame`,
+                      `RewardPool.${rewardIndex}.tradeDeals.${tradeIndex}.fame`,
                       { valueAsNumber: true }
                     )}
                     type="number"

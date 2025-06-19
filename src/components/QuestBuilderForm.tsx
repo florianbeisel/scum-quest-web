@@ -8,8 +8,14 @@ import {
   SkillSchema,
   QuestTierSchema,
   QuestBuilder,
+  extractConditionItems,
+  extractInteractionObjects,
+  isFetchCondition,
+  isEliminationCondition,
+  isInteractionCondition,
 } from "scum-quest-library";
 import { RewardBuilder } from "./RewardBuilder";
+import { ConditionBuilder } from "./ConditionBuilder";
 
 // Reward form schemas (same as before)
 const skillRewardSchema = z.object({
@@ -33,16 +39,33 @@ const rewardSchema = z.object({
   tradeDeals: z.array(tradeDealSchema).optional(),
 });
 
-// Updated main form schema
-const questFormSchema = z.object({
-  npc: NPCSchema,
-  tier: QuestTierSchema,
-  title: z.string().min(1),
-  description: z.string().min(1),
-  timeLimit: z.number().optional(),
-  rewards: z.array(rewardSchema).min(1),
+// Condition form schemas
+const conditionItemSchema = z.object({
+  name: z.string().min(1),
+  amount: z.number().min(1),
 });
 
+const conditionSchema = z.object({
+  type: z.enum(["Fetch", "Elimination", "Interaction"]),
+  sequenceIndex: z.number().min(0),
+  items: z.array(conditionItemSchema).optional(),
+  interactionObject: z.string().optional(),
+  canBeAutoCompleted: z.boolean().optional(),
+  trackingCaption: z.string().optional(),
+});
+
+// Updated main form schema - using library's field names
+const questFormSchema = z.object({
+  AssociatedNpc: NPCSchema,
+  Tier: QuestTierSchema,
+  Title: z.string().min(1),
+  Description: z.string().min(1),
+  TimeLimitHours: z.number().optional(),
+  RewardPool: z.array(rewardSchema).min(1),
+  Conditions: z.array(conditionSchema).optional(),
+});
+
+// Use local types for form data (lowercase field names)
 type QuestFormData = z.infer<typeof questFormSchema>;
 type RewardFormData = z.infer<typeof rewardSchema>;
 type SkillRewardFormData = z.infer<typeof skillRewardSchema>;
@@ -50,51 +73,161 @@ type TradeDealFormData = z.infer<typeof tradeDealSchema>;
 
 interface QuestBuilderFormProps {
   onQuestUpdate: (quest: Quest) => void;
+  preFilledQuest?: Quest | null;
 }
 
-export function QuestBuilderForm({ onQuestUpdate }: QuestBuilderFormProps) {
+export function QuestBuilderForm({
+  onQuestUpdate,
+  preFilledQuest,
+}: QuestBuilderFormProps) {
+  const [validationErrors, setValidationErrors] = React.useState<string[]>([]);
+
   const methods = useForm<QuestFormData>({
     resolver: zodResolver(questFormSchema),
     defaultValues: {
-      npc: "Bartender",
-      tier: QuestTierSchema.options[0]._def.value,
-      title: "",
-      description: "",
-      rewards: [],
+      AssociatedNpc: "Bartender",
+      Tier: QuestTierSchema.options[0]._def.value,
+      Title: "",
+      Description: "",
+      RewardPool: [],
+      Conditions: [],
     },
   });
 
   const {
+    control,
     register,
     watch,
-    control,
+    reset,
     formState: { errors },
   } = methods;
 
-  // Watch for changes and update quest in real-time
   const watchedValues = watch();
 
+  // Populate form with pre-filled quest data
   React.useEffect(() => {
+    if (preFilledQuest) {
+      // Convert Quest object to form data
+      const formData: QuestFormData = {
+        AssociatedNpc: (preFilledQuest.AssociatedNpc || "Bartender") as z.infer<
+          typeof NPCSchema
+        >,
+        Tier: preFilledQuest.Tier,
+        Title: preFilledQuest.Title,
+        Description: preFilledQuest.Description,
+        TimeLimitHours: preFilledQuest.TimeLimitHours,
+        RewardPool: preFilledQuest.RewardPool.map((reward) => ({
+          currencyNormal: reward.CurrencyNormal,
+          currencyGold: reward.CurrencyGold,
+          fame: reward.Fame,
+          skills:
+            reward.Skills?.map((skill) => ({
+              skill: skill.Skill,
+              experience: skill.Experience,
+            })) || [],
+          tradeDeals:
+            reward.TradeDeals?.map((trade) => ({
+              item: trade.Item,
+              price: trade.Price,
+              amount: trade.Amount,
+              fame: trade.Fame,
+              allowExcluded: trade.AllowExcluded,
+            })) || [],
+        })),
+        Conditions:
+          preFilledQuest.Conditions?.map((condition) => {
+            if (isFetchCondition(condition)) {
+              return {
+                type: "Fetch" as const,
+                sequenceIndex: condition.SequenceIndex,
+                items: extractConditionItems(condition).map((item) => ({
+                  name: item,
+                  amount: 1, // Default amount, might need to be extracted from condition
+                })),
+                canBeAutoCompleted: condition.CanBeAutoCompleted,
+                trackingCaption: condition.TrackingCaption || "",
+              };
+            } else if (isEliminationCondition(condition)) {
+              return {
+                type: "Elimination" as const,
+                sequenceIndex: condition.SequenceIndex,
+                items:
+                  condition.TargetCharacters?.map((char) => ({
+                    name: char,
+                    amount: condition.Amount || 1,
+                  })) || [],
+                canBeAutoCompleted: condition.CanBeAutoCompleted,
+                trackingCaption: condition.TrackingCaption || "",
+              };
+            } else if (isInteractionCondition(condition)) {
+              return {
+                type: "Interaction" as const,
+                sequenceIndex: condition.SequenceIndex,
+                items: [],
+                interactionObject:
+                  extractInteractionObjects(condition)[0] || "",
+                canBeAutoCompleted: condition.CanBeAutoCompleted,
+                trackingCaption: condition.TrackingCaption || "",
+              };
+            }
+            // Fallback for unknown condition types
+            const fallbackCondition = condition as {
+              SequenceIndex?: number;
+              CanBeAutoCompleted?: boolean;
+              TrackingCaption?: string;
+            };
+            return {
+              type: "Fetch" as const,
+              sequenceIndex: fallbackCondition.SequenceIndex || 0,
+              items: [],
+              canBeAutoCompleted: fallbackCondition.CanBeAutoCompleted || false,
+              trackingCaption: fallbackCondition.TrackingCaption || "",
+            };
+          }) || [],
+      };
+
+      reset(formData);
+    }
+  }, [preFilledQuest, reset]);
+
+  React.useEffect(() => {
+    // Always attempt validation, but collect form completion errors
+    const formErrors: string[] = [];
+
+    // Check for required basic properties
+    if (!watchedValues.Title) {
+      formErrors.push("Title is required");
+    }
+    if (!watchedValues.Description) {
+      formErrors.push("Description is required");
+    }
+    if (!watchedValues.RewardPool || watchedValues.RewardPool.length === 0) {
+      formErrors.push("At least one reward pool is required");
+    }
+
+    // If basic requirements are met, try to build the quest
     if (
-      watchedValues.title &&
-      watchedValues.description &&
-      watchedValues.rewards.length > 0
+      watchedValues.Title &&
+      watchedValues.Description &&
+      watchedValues.RewardPool.length > 0
     ) {
       try {
         // Create a FRESH builder instance each time
         let questBuilder = new QuestBuilder()
-          .withNPC(watchedValues.npc)
-          .withTier(watchedValues.tier)
-          .withTitle(watchedValues.title)
-          .withDescription(watchedValues.description);
+          .withNPC(watchedValues.AssociatedNpc)
+          .withTier(watchedValues.Tier)
+          .withTitle(watchedValues.Title)
+          .withDescription(watchedValues.Description);
 
         // Only add time limit if it's actually provided
-        if (watchedValues.timeLimit && watchedValues.timeLimit > 0) {
-          questBuilder = questBuilder.withTimeLimit(watchedValues.timeLimit);
+        if (watchedValues.TimeLimitHours && watchedValues.TimeLimitHours > 0) {
+          questBuilder = questBuilder.withTimeLimit(
+            watchedValues.TimeLimitHours
+          );
         }
 
         // Add all rewards - but only if they have actual content
-        watchedValues.rewards.forEach((reward) => {
+        watchedValues.RewardPool.forEach((reward) => {
           const hasAnything =
             (reward.currencyNormal && reward.currencyNormal > 0) ||
             (reward.currencyGold && reward.currencyGold > 0) ||
@@ -155,7 +288,7 @@ export function QuestBuilderForm({ onQuestUpdate }: QuestBuilderFormProps) {
         });
 
         // Only build the quest if we have at least one reward with content
-        const hasValidRewards = watchedValues.rewards.some(
+        const hasValidRewards = watchedValues.RewardPool.some(
           (reward) =>
             (reward.currencyNormal && reward.currencyNormal > 0) ||
             (reward.currencyGold && reward.currencyGold > 0) ||
@@ -165,26 +298,103 @@ export function QuestBuilderForm({ onQuestUpdate }: QuestBuilderFormProps) {
         );
 
         if (hasValidRewards) {
-          const quest = questBuilder
-            // Add a default condition for now
-            .addFetchCondition((c) =>
+          // Add conditions if they exist
+          if (watchedValues.Conditions && watchedValues.Conditions.length > 0) {
+            watchedValues.Conditions.forEach((condition) => {
+              if (
+                condition.type === "Fetch" &&
+                condition.items &&
+                condition.items.length > 0
+              ) {
+                questBuilder = questBuilder.addFetchCondition((c) => {
+                  let builder = c.withSequenceIndex(condition.sequenceIndex);
+                  condition.items?.forEach((item) => {
+                    builder = builder.requireItems([item.name], item.amount);
+                  });
+                  if (condition.canBeAutoCompleted) {
+                    builder = builder.autoComplete();
+                  }
+                  if (condition.trackingCaption) {
+                    builder = builder.withCaption(condition.trackingCaption);
+                  }
+                  return builder;
+                });
+              } else if (
+                condition.type === "Elimination" &&
+                condition.items &&
+                condition.items.length > 0
+              ) {
+                questBuilder = questBuilder.addEliminationCondition((c) => {
+                  let builder = c.withSequenceIndex(condition.sequenceIndex);
+                  condition.items?.forEach((item) => {
+                    builder = builder.eliminateTargets(
+                      [item.name],
+                      item.amount
+                    );
+                  });
+                  if (condition.canBeAutoCompleted) {
+                    builder = builder.autoComplete();
+                  }
+                  if (condition.trackingCaption) {
+                    builder = builder.withCaption(condition.trackingCaption);
+                  }
+                  return builder;
+                });
+              } else if (
+                condition.type === "Interaction" &&
+                condition.interactionObject
+              ) {
+                questBuilder = questBuilder.addInteractionCondition((c) => {
+                  let builder = c.withSequenceIndex(condition.sequenceIndex);
+                  // For interaction, we might need to use a different approach
+                  // since there's no direct requireInteraction method
+                  if (condition.canBeAutoCompleted) {
+                    builder = builder.autoComplete();
+                  }
+                  if (condition.trackingCaption) {
+                    builder = builder.withCaption(condition.trackingCaption);
+                  }
+                  return builder;
+                });
+              }
+            });
+          } else {
+            // Add a default condition if none provided
+            questBuilder = questBuilder.addFetchCondition((c) =>
               c.withSequenceIndex(0).requireItems(["Apple"], 1)
-            )
-            .build();
+            );
+          }
 
+          const quest = questBuilder.build();
           onQuestUpdate(quest);
+          setValidationErrors([]);
         } else {
           // Clear the quest if no valid rewards
           onQuestUpdate(null as unknown as Quest);
+          formErrors.push(
+            "At least one reward must have content (currency, skills, or trade deals)"
+          );
         }
       } catch (error) {
         // Quest is incomplete, that's OK
         console.log("Quest building error:", error);
         onQuestUpdate(null as unknown as Quest);
+
+        // Capture validation errors
+        if (error instanceof Error) {
+          formErrors.push(error.message);
+        } else if (typeof error === "string") {
+          formErrors.push(error);
+        } else {
+          formErrors.push("Unknown validation error occurred");
+        }
       }
     } else {
       onQuestUpdate(null as unknown as Quest);
     }
+
+    // Set validation errors (either form completion errors or library validation errors)
+    setValidationErrors(formErrors);
   }, [watchedValues, onQuestUpdate]);
 
   // Get NPC values from the schema enum
@@ -196,9 +406,31 @@ export function QuestBuilderForm({ onQuestUpdate }: QuestBuilderFormProps) {
   return (
     <FormProvider {...methods}>
       <div className="p-6 space-y-6">
-        <div className="bg-red-500 text-white p-4 rounded">
-          This should be red with white text if Tailwind is working
+        {/* VALIDATION ERRORS SECTION */}
+        <div
+          className={`p-4 rounded ${
+            validationErrors.length > 0
+              ? "bg-red-500 text-white"
+              : "bg-green-500 text-white"
+          }`}
+        >
+          <h3 className="font-semibold mb-2">Validation Status</h3>
+          {validationErrors.length > 0 ? (
+            <div>
+              <p className="mb-2">Validation errors found:</p>
+              <ul className="list-disc list-inside space-y-1">
+                {validationErrors.map((error, index) => (
+                  <li key={index} className="text-sm">
+                    {error}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p>No validation errors - quest is valid!</p>
+          )}
         </div>
+
         {/* BASIC PROPERTIES SECTION */}
         <div>
           <h2 className="text-xl font-semibold mb-4">Basic Properties</h2>
@@ -210,7 +442,7 @@ export function QuestBuilderForm({ onQuestUpdate }: QuestBuilderFormProps) {
                 Associated NPC
               </label>
               <select
-                {...register("npc")}
+                {...register("AssociatedNpc")}
                 className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
               >
                 {npcs.map((npc) => (
@@ -219,9 +451,9 @@ export function QuestBuilderForm({ onQuestUpdate }: QuestBuilderFormProps) {
                   </option>
                 ))}
               </select>
-              {errors.npc && (
+              {errors.AssociatedNpc && (
                 <p className="text-red-500 text-sm mt-1">
-                  {errors.npc.message}
+                  {errors.AssociatedNpc.message}
                 </p>
               )}
             </div>
@@ -232,7 +464,7 @@ export function QuestBuilderForm({ onQuestUpdate }: QuestBuilderFormProps) {
                 Tier
               </label>
               <select
-                {...register("tier", { valueAsNumber: true })}
+                {...register("Tier", { valueAsNumber: true })}
                 className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
               >
                 {questTiers.map((tier) => (
@@ -241,9 +473,9 @@ export function QuestBuilderForm({ onQuestUpdate }: QuestBuilderFormProps) {
                   </option>
                 ))}
               </select>
-              {errors.tier && (
+              {errors.Tier && (
                 <p className="text-red-500 text-sm mt-1">
-                  {errors.tier.message}
+                  {errors.Tier.message}
                 </p>
               )}
             </div>
@@ -254,14 +486,14 @@ export function QuestBuilderForm({ onQuestUpdate }: QuestBuilderFormProps) {
                 Title
               </label>
               <input
-                {...register("title")}
+                {...register("Title")}
                 type="text"
                 className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                 placeholder="Enter quest title..."
               />
-              {errors.title && (
+              {errors.Title && (
                 <p className="text-red-500 text-sm mt-1">
-                  {errors.title.message}
+                  {errors.Title.message}
                 </p>
               )}
             </div>
@@ -272,14 +504,14 @@ export function QuestBuilderForm({ onQuestUpdate }: QuestBuilderFormProps) {
                 Description
               </label>
               <textarea
-                {...register("description")}
+                {...register("Description")}
                 rows={3}
                 className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                 placeholder="Enter quest description..."
               />
-              {errors.description && (
+              {errors.Description && (
                 <p className="text-red-500 text-sm mt-1">
-                  {errors.description.message}
+                  {errors.Description.message}
                 </p>
               )}
             </div>
@@ -290,16 +522,16 @@ export function QuestBuilderForm({ onQuestUpdate }: QuestBuilderFormProps) {
                 Time Limit (hours) - Optional
               </label>
               <input
-                {...register("timeLimit", { valueAsNumber: true })}
+                {...register("TimeLimitHours", { valueAsNumber: true })}
                 type="number"
                 min="0"
                 step="0.5"
                 className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                 placeholder="24"
               />
-              {errors.timeLimit && (
+              {errors.TimeLimitHours && (
                 <p className="text-red-500 text-sm mt-1">
-                  {errors.timeLimit.message}
+                  {errors.TimeLimitHours.message}
                 </p>
               )}
             </div>
@@ -309,13 +541,8 @@ export function QuestBuilderForm({ onQuestUpdate }: QuestBuilderFormProps) {
         {/* REWARDS SECTION */}
         <RewardBuilder control={control} />
 
-        {/* CONDITIONS SECTION - Placeholder for now */}
-        <div>
-          <h3 className="text-lg font-semibold text-gray-700">Conditions</h3>
-          <p className="text-gray-500 text-sm">
-            Coming soon - condition builder
-          </p>
-        </div>
+        {/* CONDITIONS SECTION */}
+        <ConditionBuilder control={control} />
       </div>
     </FormProvider>
   );

@@ -1735,10 +1735,10 @@ scheduler@^0.26.0:
   resolved "https://registry.yarnpkg.com/scheduler/-/scheduler-0.26.0.tgz#4ce8a8c2a2095f13ea11bf9a445be50c555d6337"
   integrity sha512-NlHwttCI/l5gCPR3D1nNXtWABUmBwvZpEQiD4IXSbIDq8BzLIK/7Ir5gTFSGZDUu37K5cMNp0hFtzO38sC7gWA==
 
-scum-quest-library@1.2.0:
-  version "1.2.0"
-  resolved "https://registry.yarnpkg.com/scum-quest-library/-/scum-quest-library-1.2.0.tgz#fd4ddb5d827a43719e435d1262eea6fb25a5f176"
-  integrity sha512-n8q/MLmluQx5jNmzHyg31gv+8dfQn/x2Zy90WKurkQ2eUdhfKiWvqiGqarSTefuWvuXkLD9C61+6LqZqJX5xxA==
+scum-quest-library@^1.3.0:
+  version "1.3.0"
+  resolved "https://registry.yarnpkg.com/scum-quest-library/-/scum-quest-library-1.3.0.tgz#aba0b211ae36e2b12a17a907dd4ee5102b640dd4"
+  integrity sha512-AsJRKoJ1YsMYk++zpYVM3gkTDnJd63jo25tHquSImt3XG2pTwFRM6KYwtf4AQjM2R08W9dwl8I52LFmpxaul2A==
   dependencies:
     tslib "^2.8.1"
     zod "^3.25.67"
