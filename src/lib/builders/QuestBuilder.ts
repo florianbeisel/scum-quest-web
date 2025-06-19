@@ -1,7 +1,11 @@
-import { QuestSchema } from "../schemas/quest/index.js";
-import { ConditionBuilder } from "./conditions/index.js";
-import { RewardBuilder } from "./rewards/index.js";
-import type { Quest, Condition, Reward, NPC } from "../types";
+import {
+  QuestSchema,
+  ConditionBuilder,
+  RewardBuilder,
+  type Quest,
+  type Condition,
+  type NPC,
+} from "scum-quest-library";
 
 export class QuestBuilder {
   private quest: Partial<Quest> = {
